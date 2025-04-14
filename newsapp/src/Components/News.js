@@ -7,7 +7,7 @@ import { sampleArticles } from '../data/sampleData'
 import InfiniteScroll from 'react-infinite-scroll-component'
 
 // API base URL - points directly to Flask backend
-const API_BASE = 'http://localhost:5000';
+const API_BASE = 'http://localhost:5000/api';
 
 export class News extends Component {
   static contextType = ThemeContext;
@@ -40,44 +40,30 @@ export class News extends Component {
     document.title = `${this.capitalizeFirstLetter(this.props.category)} - NewsJackal`;
   }
 
-  async componentDidMount(){
-    if (this.props.setProgress) {
-      this.props.setProgress(10);
-    }
+  async componentDidMount() {
+    if (this.props.setProgress) this.props.setProgress(10);
 
-    // Check if backend is available
+    const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api'; // Updated fallback
+    console.log("Using API_BASE:", API_BASE);
+
     try {
-      console.log("Checking backend health...");
-      const response = await fetch(`${API_BASE}/api/health`);
+      console.log("Checking backend health at:", `${API_BASE}/health`); // Note: Vercel uses /api/health
+      const response = await fetch(`${API_BASE}/health`);
       if (response.ok) {
-        console.log("Backend is available!");
+        console.log("Backend health check passed:", await response.json());
         this.setState({ backendAvailable: true });
-        
-        // Fetch available sources
         await this.fetchSources();
-        
-        // Fetch news
         await this.fetchNews();
       } else {
-        console.error("Backend server is not responding properly");
-        this.setState({ 
-          backendAvailable: false,
-          apiError: true,
-          errorMessage: "Backend server is not responding properly"
-        });
+        console.error("Backend health check failed:", response.status, await response.text());
+        this.setState({ backendAvailable: false, apiError: true, errorMessage: "Backend health check failed" });
       }
     } catch (error) {
-      console.error("Backend connection error:", error);
-      this.setState({ 
-        backendAvailable: false,
-        apiError: true,
-        errorMessage: "Backend server is not available. Please start the backend server."
-      });
+      console.error("Backend connection error:", error.message);
+      this.setState({ backendAvailable: false, apiError: true, errorMessage: "Backend connection error" });
     }
 
-    if (this.props.setProgress) {
-      this.props.setProgress(100);
-    }
+    if (this.props.setProgress) this.props.setProgress(100);
   }
 
   async componentDidUpdate(prevProps) {
@@ -118,103 +104,68 @@ export class News extends Component {
   }
 
   fetchNews = async () => {
-    this.setState({loading: true});
+    this.setState({ loading: true });
 
+    const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api'; // Updated fallback
     if (!this.state.backendAvailable) {
+      console.warn("Backend unavailable, using sample data");
       this.setState({
         articles: sampleArticles,
         totalResults: sampleArticles.length,
         loading: false,
         apiError: true,
-        errorMessage: "Backend server is not available. Please start the backend server.",
-        errorShown: false,
+        errorMessage: "Using sample data due to backend unavailability",
         hasMore: false
       });
       return;
     }
 
-    let apiEndpoint = `${API_BASE}/api/top-headlines`;
+    let apiEndpoint = `${API_BASE}/top-headlines`; // Matches Vercel function name
     let queryParams = new URLSearchParams();
-
-    if (this.props.category) {
-      queryParams.append('category', this.props.category);
-    }
-
-    // Add source parameter if a specific source is selected
-    if (this.state.selectedSource) {
-      queryParams.append('source', this.state.selectedSource);
-    }
-
+    queryParams.append('category', this.props.category);
+    if (this.state.selectedSource) queryParams.append('source', this.state.selectedSource);
     queryParams.append('page', this.state.page);
     queryParams.append('pageSize', this.props.pageSize);
-
     const url = `${apiEndpoint}?${queryParams.toString()}`;
-    console.log("Fetching from:", url);
+    console.log("Fetching news from:", url);
 
     try {
-      let data = await fetch(url);
-      let parsedData = await data.json();
-      console.log("Received data:", parsedData);
+      const response = await fetch(url);
+      console.log("Fetch response status:", response.status);
+      const parsedData = await response.json();
+      console.log("Fetch response data:", parsedData);
 
       if (parsedData.status === "ok" && parsedData.articles && parsedData.articles.length > 0) {
-        if (this.state.page === 1) {
-          this.setState({
-            articles: parsedData.articles, 
-            totalResults: parsedData.totalResults,
-            loading: false,
-            apiError: false,
-            errorMessage: "",
-            errorShown: false,
-            hasMore: parsedData.articles.length < parsedData.totalResults
-          }, () => {
-            if (this.props.setProgress) {
-              this.props.setProgress(100);
-            }
-          });
-        } else {
-          this.setState(prevState => ({
-            articles: [...prevState.articles, ...parsedData.articles],
-            totalResults: parsedData.totalResults,
-            loading: false,
-            apiError: false,
-            errorMessage: "",
-            hasMore: prevState.articles.length + parsedData.articles.length < parsedData.totalResults
-          }), () => {
-            if (this.props.setProgress) {
-              this.props.setProgress(100);
-            }
-          });
-        }
+        this.setState(prevState => ({
+          articles: this.state.page === 1 ? parsedData.articles : [...prevState.articles, ...parsedData.articles],
+          totalResults: parsedData.totalResults,
+          loading: false,
+          apiError: false,
+          errorMessage: "",
+          hasMore: this.state.page === 1 ? parsedData.articles.length < parsedData.totalResults : prevState.articles.length + parsedData.articles.length < parsedData.totalResults
+        }), () => {
+          if (this.props.setProgress) this.props.setProgress(100);
+        });
       } else {
-        console.error("No articles found or API error:", parsedData.message);
+        console.error("No articles or API error:", parsedData.message);
         this.setState({
           articles: sampleArticles,
           totalResults: sampleArticles.length,
           loading: false,
           apiError: true,
           errorMessage: parsedData.message || "No articles found",
-          errorShown: false,
           hasMore: false
-        }, () => {
-          if (this.props.setProgress) {
-            this.props.setProgress(100);
-          }
         });
       }
     } catch (error) {
-      console.error("Network error or API unavailable:", error);
+      console.error("Network error:", error.message);
       this.setState({
         articles: sampleArticles,
         totalResults: sampleArticles.length,
         loading: false,
         apiError: true,
-        errorMessage: "Network error or API unavailable. Please check if the backend server is running.",
-        errorShown: false,
+        errorMessage: "Network error",
         hasMore: false
-      }, () => {
-        if (this.props.setProgress) {
-          this.props.setProgress(100);
-        }
       });
     }
   }
