@@ -32,6 +32,6 @@
     }
   ],
   "env": {
-    "REACT_APP_API_URL": "https://news-jackall.vercel.app/api"
+    "REACT_APP_API_URL": "https://news-jackal1.vercel.app/api"
   }
 }
