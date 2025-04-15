@@ -7,7 +7,7 @@ import { sampleArticles } from '../data/sampleData'
 import InfiniteScroll from 'react-infinite-scroll-component'
 
 // API base URL - points directly to Flask backend
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = process.env.REACT_APP_API_URL || 'https://newsjackal.onrender.com/api';
 
 export class News extends Component {
   static contextType = ThemeContext;
@@ -43,7 +43,7 @@ export class News extends Component {
   async componentDidMount() {
     if (this.props.setProgress) this.props.setProgress(10);
 
-    const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api'; // Updated fallback
+    const API_BASE = process.env.REACT_APP_API_URL || 'https://newsjackal.onrender.com/api'; // Updated fallback
     console.log("Using API_BASE:", API_BASE);
 
     try {
